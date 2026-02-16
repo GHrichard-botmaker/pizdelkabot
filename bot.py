@@ -7,8 +7,8 @@ from aiogram.types import Message
 import openai  # Для DeepSeek используем OpenAI-совместимый клиент
 
 # Настройки
-BOT_TOKEN = "8450095162:AAELM9tK0GYYsJUHgV8r3LmdAw9WMucPMWQ"
-DEEPSEEK_API_KEY = "sk-323062d009a24624b49d0edbd58be612"
+BOT_TOKEN = ""
+DEEPSEEK_API_KEY = ""
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1"  # Или другой endpoint
 RESPONSE_CHANCE = 0.1  # 10% шанс ответа на любое сообщение
 
@@ -90,3 +90,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
