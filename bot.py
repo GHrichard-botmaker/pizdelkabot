@@ -7,7 +7,7 @@ from aiogram.types import Message
 from aiogram.utils import executor
 import openai
 
-# Настройки из переменных окружения
+# Настройки
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 RESPONSE_CHANCE = float(os.getenv("RESPONSE_CHANCE", "0.1"))
@@ -23,23 +23,16 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(bot)
 dp.middleware.setup(LoggingMiddleware())
 
-# Обработчик команды start
 @dp.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
-    if message.chat.type != 'private':
-        await message.reply(
-            f"👋 Привет! Я AI-бот на базе DeepSeek.\n"
-            f"У меня {RESPONSE_CHANCE*100}% шанс ответить на любое сообщение"
-        )
+    await message.reply(f"👋 Я AI-бот! Отвечаю с шансом {RESPONSE_CHANCE*100}%")
 
-# Обработчик всех сообщений
 @dp.message_handler()
 async def handle_message(message: types.Message):
-    # Игнорируем сообщения от ботов
     if message.from_user.is_bot:
         return
     
-    # Проверяем упоминание бота
+    # Проверяем упоминание или случайный шанс
     bot_mentioned = False
     if message.entities:
         for entity in message.entities:
@@ -49,36 +42,24 @@ async def handle_message(message: types.Message):
                     bot_mentioned = True
                     break
     
-    # Случайный шанс или упоминание
     if not (bot_mentioned or random.random() < RESPONSE_CHANCE):
         return
     
     try:
-        # Отправляем статус "печатает"
         await bot.send_chat_action(message.chat.id, "typing")
         
-        # Получаем ответ от DeepSeek
         response = client.chat.completions.create(
             model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": "Ты дружелюбный AI-ассистент в Telegram группе. Отвечай кратко и по делу."},
-                {"role": "user", "content": message.text}
-            ],
-            max_tokens=500,
-            temperature=0.7
+            messages=[{"role": "user", "content": message.text}],
+            max_tokens=500
         )
         
         ai_response = response.choices[0].message.content
-        
-        # Отправляем ответ
-        if bot_mentioned:
-            await message.reply(ai_response)
-        else:
-            await message.answer(ai_response)
+        await message.reply(ai_response)
             
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.reply("😵 Извините, ошибка...")
+        await message.reply("😵 Ошибка...")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
