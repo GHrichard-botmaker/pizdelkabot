@@ -1,72 +1,68 @@
-import asyncio
 import logging
 import random
+import os
 from aiogram import Bot, Dispatcher, types
-from aiogram.filters import Command
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.types import Message
-import openai  # Для DeepSeek используем OpenAI-совместимый клиент
+from aiogram.utils import executor
+import openai
 
-# Настройки
-BOT_TOKEN = "BOT_TOKEN"
-DEEPSEEK_API_KEY = "DEEPSEEK_API_KEY"
-DEEPSEEK_API_URL = "https://api.deepseek.com/v1"  # Или другой endpoint
-RESPONSE_CHANCE = 0.1  # 10% шанс ответа на любое сообщение
+# Настройки из переменных окружения
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+RESPONSE_CHANCE = float(os.getenv("RESPONSE_CHANCE", "0.1"))
 
-# Настройка DeepSeek клиента
+# Настройка DeepSeek
 client = openai.OpenAI(
     api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_API_URL
+    base_url="https://api.deepseek.com/v1"
 )
 
+# Инициализация бота
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(bot)
+dp.middleware.setup(LoggingMiddleware())
 
-# Приветственное сообщение при добавлении в группу
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    if message.chat.type != "private":
+# Обработчик команды start
+@dp.message_handler(commands=['start'])
+async def cmd_start(message: types.Message):
+    if message.chat.type != 'private':
         await message.reply(
-            "👋 Привет! Я AI-бот на базе DeepSeek.\n"
-            f"У меня {RESPONSE_CHANCE*100}% шанс ответить на любое сообщение, "
-            "или просто отметь меня @username_bot"
+            f"👋 Привет! Я AI-бот на базе DeepSeek.\n"
+            f"У меня {RESPONSE_CHANCE*100}% шанс ответить на любое сообщение"
         )
 
-# Обработка упоминаний и случайных сообщений
-@dp.message()
-async def handle_message(message: Message):
-    # Проверяем, не от бота ли сообщение
+# Обработчик всех сообщений
+@dp.message_handler()
+async def handle_message(message: types.Message):
+    # Игнорируем сообщения от ботов
     if message.from_user.is_bot:
         return
     
-    # Проверяем, упомянули ли бота
+    # Проверяем упоминание бота
     bot_mentioned = False
     if message.entities:
         for entity in message.entities:
             if entity.type == "mention":
                 mention_text = message.text[entity.offset:entity.offset+entity.length]
-                if mention_text == f"@{bot.id}":
+                if mention_text == f"@{bot.username}":
                     bot_mentioned = True
                     break
     
     # Случайный шанс или упоминание
-    should_respond = bot_mentioned or random.random() < RESPONSE_CHANCE
-    
-    if not should_respond:
+    if not (bot_mentioned or random.random() < RESPONSE_CHANCE):
         return
     
     try:
-        # Отправляем "печатает..." для реализма
+        # Отправляем статус "печатает"
         await bot.send_chat_action(message.chat.id, "typing")
         
-        # Формируем контекст
-        prompt = f"Ответь на сообщение от лица AI-ассистента: {message.text}"
-        
-        # Запрос к DeepSeek
+        # Получаем ответ от DeepSeek
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
                 {"role": "system", "content": "Ты дружелюбный AI-ассистент в Telegram группе. Отвечай кратко и по делу."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": message.text}
             ],
             max_tokens=500,
             temperature=0.7
@@ -74,7 +70,7 @@ async def handle_message(message: Message):
         
         ai_response = response.choices[0].message.content
         
-        # Отправляем ответ, упоминая пользователя если нужно
+        # Отправляем ответ
         if bot_mentioned:
             await message.reply(ai_response)
         else:
@@ -82,13 +78,8 @@ async def handle_message(message: Message):
             
     except Exception as e:
         logging.error(f"Ошибка: {e}")
-        await message.reply("😵 Извините, я временно недоступен...")
-
-async def main():
-    logging.basicConfig(level=logging.INFO)
-    await dp.start_polling(bot)
+        await message.reply("😵 Извините, ошибка...")
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
-
+    logging.basicConfig(level=logging.INFO)
+    executor.start_polling(dp, skip_updates=True)
